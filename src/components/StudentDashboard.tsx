@@ -1,106 +1,191 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { QrCode, Calendar, BookOpen, Target, Camera } from "lucide-react";
+import { QrCode, Calendar, TrendingUp, Clock, LogOut, Scan } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const StudentDashboard = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isScanning, setIsScanning] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<any>(null);
 
-  const handleQRScan = () => {
+  useEffect(() => {
+    const checkAuthAndLoadData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate('/auth/login?role=student');
+        return;
+      }
+
+      // Load student profile
+      const { data: studentProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (profileError || !studentProfile || studentProfile.role !== 'student') {
+        toast({
+          title: "Access Denied",
+          description: "You must be a student to access this dashboard.",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
+
+      setProfile(studentProfile);
+
+      // Load student's classes
+      const { data: studentClasses, error: classesError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('name', studentProfile.class)
+        .eq('section', studentProfile.section);
+
+      if (!classesError && studentClasses) {
+        setClasses(studentClasses);
+      }
+
+      // Load attendance statistics
+      const { data: attendanceData } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('student_id', studentProfile.id);
+
+      if (attendanceData) {
+        const totalClasses = attendanceData.length;
+        const attendedClasses = attendanceData.filter(a => a.status === 'present').length;
+        const attendancePercentage = totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 0;
+        
+        setAttendanceStats({
+          totalClasses,
+          attendedClasses,
+          attendancePercentage
+        });
+      }
+    };
+
+    checkAuthAndLoadData();
+  }, [navigate, toast]);
+
+  const handleQRScan = async () => {
     setIsScanning(true);
-    // Simulate scanning daily QR code
-    setTimeout(() => {
-      setIsScanning(false);
-      const today = new Date().toDateString();
-      toast({
-        title: "Daily Attendance Marked!",
-        description: `Your attendance for ${today} has been successfully recorded.`,
-      });
-    }, 2000);
+    
+    // Simulate QR scanning process
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setIsScanning(false);
+    toast({
+      title: "Attendance Marked",
+      description: "Your attendance has been successfully recorded for today.",
+    });
   };
 
   const handleManualEntry = () => {
-    const attendanceCode = prompt("Enter today's attendance code:");
+    const attendanceCode = prompt("Enter the attendance code provided by your teacher:");
     if (attendanceCode) {
-      const today = new Date().toDateString();
       toast({
-        title: "Attendance Marked!",
-        description: `Manual attendance for ${today} recorded with code: ${attendanceCode}`,
+        title: "Attendance Code Entered",
+        description: `Code "${attendanceCode}" has been submitted for verification.`,
       });
     }
   };
 
-  const studentData = {
-    name: "Priya Sharma",
-    rollNo: "21BCE045",
-    class: "B.Tech 2nd Year",
-    section: "Section A",
-    todayAttendance: 5,
-    totalClasses: 6,
-    overallAttendance: 87.5
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
+      navigate('/');
+    }
   };
+
+  if (!profile) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="bg-gradient-success text-success-foreground p-6">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-2">Student Dashboard</h1>
-          <p className="text-success-foreground/80">Welcome back, {studentData.name}!</p>
+      <div className="container mx-auto p-6">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Welcome, {profile.name}</h1>
+            <p className="text-muted-foreground mt-1">
+              Roll Number: {profile.roll_number} • Class: {profile.class}-{profile.section}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={handleLogout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
         </div>
-      </div>
 
-      <div className="max-w-4xl mx-auto p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-gradient-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-muted-foreground">Today's Classes</CardTitle>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today's Classes</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">
-                {studentData.todayAttendance}/{studentData.totalClasses}
+              <div className="text-2xl font-bold">{classes.length}</div>
+              <p className="text-xs text-muted-foreground">Scheduled for today</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Overall Attendance</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{attendanceStats?.attendancePercentage || 0}%</div>
+              <p className="text-xs text-muted-foreground">
+                {attendanceStats?.attendedClasses || 0} out of {attendanceStats?.totalClasses || 0} classes
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Next Class</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {classes.length > 0 ? classes[0].schedule_time : 'No classes'}
               </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-gradient-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-muted-foreground">Overall Attendance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">{studentData.overallAttendance}%</div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-gradient-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-muted-foreground">Next Class</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg font-semibold">Database Systems</div>
-              <div className="text-sm text-muted-foreground">2:00 PM</div>
+              <p className="text-xs text-muted-foreground">
+                {classes.length > 0 ? `${classes[0].subject} - Room ${classes[0].room_number}` : 'No classes scheduled'}
+              </p>
             </CardContent>
           </Card>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="bg-gradient-card">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <QrCode className="h-5 w-5 text-success" />
-                Daily Attendance
+                <QrCode className="h-5 w-5 text-primary" />
+                Mark Attendance
               </CardTitle>
-              <CardDescription>Scan today's QR code or enter attendance code</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Button 
                 onClick={handleQRScan}
-                className="w-full bg-success shadow-success"
+                className="w-full"
                 disabled={isScanning}
               >
-                <Camera className="h-4 w-4 mr-2" />
+                <Scan className="h-4 w-4 mr-2" />
                 {isScanning ? "Scanning..." : "Scan Today's QR Code"}
               </Button>
               <Button 
@@ -113,30 +198,27 @@ const StudentDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-card">
+          <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                Today's Schedule
-              </CardTitle>
+              <CardTitle>Today's Schedule</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {[
-                  { subject: "Computer Networks", time: "09:00 AM", status: "Present" },
-                  { subject: "Operating Systems", time: "11:00 AM", status: "Present" },
-                  { subject: "Database Systems", time: "02:00 PM", status: "Upcoming" },
-                ].map((cls, index) => (
-                  <div key={index} className="flex justify-between items-center p-2 rounded bg-muted/50">
-                    <div>
-                      <p className="font-medium">{cls.subject}</p>
-                      <p className="text-sm text-muted-foreground">{cls.time}</p>
+                {classes.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No classes scheduled for today</p>
+                ) : (
+                  classes.map((classItem, index) => (
+                    <div key={classItem.id} className="flex justify-between items-center p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{classItem.subject}</p>
+                        <p className="text-sm text-muted-foreground">{classItem.schedule_time} • Room {classItem.room_number}</p>
+                      </div>
+                      <Badge variant="secondary">
+                        Upcoming
+                      </Badge>
                     </div>
-                    <Badge variant={cls.status === "Present" ? "default" : "secondary"}>
-                      {cls.status}
-                    </Badge>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

@@ -14,7 +14,143 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attendance: {
+        Row: {
+          class_id: string
+          date: string
+          id: string
+          marked_at: string
+          qr_code: string | null
+          status: string
+          student_id: string
+        }
+        Insert: {
+          class_id: string
+          date?: string
+          id?: string
+          marked_at?: string
+          qr_code?: string | null
+          status: string
+          student_id: string
+        }
+        Update: {
+          class_id?: string
+          date?: string
+          id?: string
+          marked_at?: string
+          qr_code?: string | null
+          status?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          room_number: string | null
+          schedule_days: string[]
+          schedule_time: string
+          section: string
+          subject: string
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          room_number?: string | null
+          schedule_days: string[]
+          schedule_time: string
+          section: string
+          subject: string
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          room_number?: string | null
+          schedule_days?: string[]
+          schedule_time?: string
+          section?: string
+          subject?: string
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classes_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          class: string | null
+          created_at: string
+          department: string | null
+          email: string
+          employee_id: string | null
+          id: string
+          name: string
+          role: string
+          roll_number: string | null
+          section: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          class?: string | null
+          created_at?: string
+          department?: string | null
+          email: string
+          employee_id?: string | null
+          id?: string
+          name: string
+          role: string
+          roll_number?: string | null
+          section?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          class?: string | null
+          created_at?: string
+          department?: string | null
+          email?: string
+          employee_id?: string | null
+          id?: string
+          name?: string
+          role?: string
+          roll_number?: string | null
+          section?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

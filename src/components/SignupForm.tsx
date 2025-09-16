@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GraduationCap, Users, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import AuthLayout from "./AuthLayout";
 
 const SignupForm = () => {
@@ -27,6 +28,26 @@ const SignupForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Get user profile to determine role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (profile) {
+          navigate(profile.role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+        }
+      }
+    };
+    checkAuth();
+  }, [navigate]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
@@ -43,7 +64,6 @@ const SignupForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
     if (formData.password !== formData.confirmPassword) {
       toast({
@@ -51,21 +71,51 @@ const SignupForm = () => {
         description: "Passwords do not match. Please try again.",
         variant: "destructive",
       });
-      setIsLoading(false);
       return;
     }
 
-    // Simulate signup process
+    setIsLoading(true);
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Account Created Successfully",
-        description: `Welcome to Smart Attendance, ${formData.name}!`,
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            name: formData.name,
+            role: role,
+            ...(role === 'teacher' && {
+              department: formData.department,
+              employee_id: formData.employeeId
+            }),
+            ...(role === 'student' && {
+              class: formData.class,
+              section: formData.section,
+              roll_number: formData.name.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000)
+            })
+          }
+        }
       });
 
-      // Navigate to login
-      navigate(`/auth/login?role=${role}`);
+      if (error) {
+        toast({
+          title: "Signup Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.user) {
+        toast({
+          title: "Account Created Successfully",
+          description: `Welcome to Smart Attendance, ${formData.name}!`,
+        });
+        
+        // Navigate to login page
+        navigate(`/auth/login?role=${role}`);
+      }
     } catch (error) {
       toast({
         title: "Signup Failed",
@@ -164,12 +214,12 @@ const SignupForm = () => {
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cse">Computer Science</SelectItem>
-                  <SelectItem value="ece">Electronics</SelectItem>
-                  <SelectItem value="me">Mechanical</SelectItem>
-                  <SelectItem value="ce">Civil</SelectItem>
-                  <SelectItem value="math">Mathematics</SelectItem>
-                  <SelectItem value="physics">Physics</SelectItem>
+                  <SelectItem value="Computer Science">Computer Science</SelectItem>
+                  <SelectItem value="Electronics">Electronics</SelectItem>
+                  <SelectItem value="Mechanical">Mechanical</SelectItem>
+                  <SelectItem value="Civil">Civil</SelectItem>
+                  <SelectItem value="Mathematics">Mathematics</SelectItem>
+                  <SelectItem value="Physics">Physics</SelectItem>
                 </SelectContent>
               </Select>
             </div>

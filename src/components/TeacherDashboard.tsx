@@ -1,223 +1,270 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { QrCode, Users, Calendar, BarChart3, Download, Eye, Plus } from "lucide-react";
-import QRCodeGenerator from "./QRCodeGenerator";
-import AttendanceHeatmap from "./AttendanceHeatmap";
+import { Users, BookOpen, Calendar, QrCode, TrendingUp, Clock, LogOut } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import AttendanceTable from "./AttendanceTable";
+import AttendanceHeatmap from "./AttendanceHeatmap";
+import QRCodeGenerator from "./QRCodeGenerator";
 
 const TeacherDashboard = () => {
-  const [selectedClass, setSelectedClass] = useState("btech2-a");
-  const [selectedSubject, setSelectedSubject] = useState("computer-networks");
-  const [showQRCode, setShowQRCode] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [showQRGenerator, setShowQRGenerator] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<any>(null);
 
-  const classData = {
-    totalStudents: 45,
-    presentToday: 38,
-    absentToday: 7,
-    attendanceRate: 84.4
+  useEffect(() => {
+    const checkAuthAndLoadData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate('/auth/login?role=teacher');
+        return;
+      }
+
+      // Load teacher profile
+      const { data: teacherProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (profileError || !teacherProfile || teacherProfile.role !== 'teacher') {
+        toast({
+          title: "Access Denied",
+          description: "You must be a teacher to access this dashboard.",
+          variant: "destructive",
+        });
+        navigate('/');
+        return;
+      }
+
+      setProfile(teacherProfile);
+
+      // Load teacher's classes
+      const { data: teacherClasses, error: classesError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('teacher_id', teacherProfile.id);
+
+      if (!classesError && teacherClasses) {
+        setClasses(teacherClasses);
+      }
+
+      // Load attendance statistics
+      if (teacherClasses && teacherClasses.length > 0) {
+        const classIds = teacherClasses.map(c => c.id);
+        const { data: attendanceData } = await supabase
+          .from('attendance')
+          .select('status, date')
+          .in('class_id', classIds);
+
+        if (attendanceData) {
+          const today = new Date().toISOString().split('T')[0];
+          const todayAttendance = attendanceData.filter(a => a.date === today);
+          const totalStudents = attendanceData.length;
+          const presentToday = todayAttendance.filter(a => a.status === 'present').length;
+          
+          setAttendanceStats({
+            totalStudents,
+            presentToday,
+            attendanceRate: totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0
+          });
+        }
+      }
+    };
+
+    checkAuthAndLoadData();
+  }, [navigate, toast]);
+
+  const handleGenerateQR = () => {
+    setShowQRGenerator(true);
+    toast({
+      title: "QR Code Generated",
+      description: "Students can now scan the QR code to mark their attendance.",
+    });
   };
 
-  const recentClasses = [
-    { subject: "Computer Networks", time: "09:00 AM", present: 42, total: 45, date: "Today" },
-    { subject: "Operating Systems", time: "11:00 AM", present: 40, total: 45, date: "Today" },
-    { subject: "Database Systems", time: "02:00 PM", present: 44, total: 45, date: "Yesterday" },
-  ];
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
+      navigate('/');
+    }
+  };
+
+  if (!profile) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-gradient-primary text-primary-foreground p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold">Teacher Dashboard</h1>
-              <p className="text-primary-foreground/80">Welcome back, Prof. Rajesh Kumar</p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => setShowQRCode(true)}
-                className="bg-primary-foreground/20 text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/30"
-              >
-                <QrCode className="h-4 w-4 mr-2" />
-                Generate QR Code
-              </Button>
-              <Button variant="outline" className="bg-primary-foreground/10 text-primary-foreground border-primary-foreground/30 hover:bg-primary-foreground/20">
-                <Download className="h-4 w-4 mr-2" />
-                Export Data
-              </Button>
-            </div>
+      <div className="container mx-auto p-6">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Welcome back, {profile.name}</h1>
+            <p className="text-muted-foreground mt-1">
+              {profile.department} • Employee ID: {profile.employee_id}
+            </p>
           </div>
-
-          {/* Class Selection */}
-          <div className="flex gap-4 mb-4">
-            <Select value={selectedClass} onValueChange={setSelectedClass}>
-              <SelectTrigger className="w-48 bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground">
-                <SelectValue placeholder="Select Class" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="btech2-a">B.Tech 2nd Year - Section A</SelectItem>
-                <SelectItem value="btech2-b">B.Tech 2nd Year - Section B</SelectItem>
-                <SelectItem value="btech3-a">B.Tech 3rd Year - Section A</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-              <SelectTrigger className="w-48 bg-primary-foreground/10 border-primary-foreground/30 text-primary-foreground">
-                <SelectValue placeholder="Select Subject" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="computer-networks">Computer Networks</SelectItem>
-                <SelectItem value="operating-systems">Operating Systems</SelectItem>
-                <SelectItem value="database-systems">Database Systems</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-gradient-card border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Students</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">{classData.totalStudents}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card border-success/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Present Today</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-success">{classData.presentToday}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card border-warning/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Absent Today</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-warning">{classData.absentToday}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-card border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Attendance Rate</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">{classData.attendanceRate}%</div>
-            </CardContent>
-          </Card>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={handleLogout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
         </div>
 
-        {/* Main Content */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="attendance">Attendance Records</TabsTrigger>
-            <TabsTrigger value="heatmap">Heat Map</TabsTrigger>
-            <TabsTrigger value="students">Student Management</TabsTrigger>
-          </TabsList>
+        <div className="flex space-x-4 mb-6">
+          <Button
+            variant={activeTab === "overview" ? "default" : "outline"}
+            onClick={() => setActiveTab("overview")}
+          >
+            Overview
+          </Button>
+          <Button
+            variant={activeTab === "attendance" ? "default" : "outline"}
+            onClick={() => setActiveTab("attendance")}
+          >
+            Attendance Table
+          </Button>
+          <Button
+            variant={activeTab === "heatmap" ? "default" : "outline"}
+            onClick={() => setActiveTab("heatmap")}
+          >
+            Attendance Heatmap
+          </Button>
+        </div>
 
-          <TabsContent value="overview" className="space-y-6">
+        {activeTab === "overview" && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Classes</CardTitle>
+                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{classes.length}</div>
+                  <p className="text-xs text-muted-foreground">Active courses</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{attendanceStats?.totalStudents || 0}</div>
+                  <p className="text-xs text-muted-foreground">Enrolled students</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Today's Attendance</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{attendanceStats?.attendanceRate || 0}%</div>
+                  <p className="text-xs text-muted-foreground">Overall attendance rate</p>
+                </CardContent>
+              </Card>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Recent Classes */}
-              <Card className="bg-gradient-card">
+              <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-primary" />
-                    Recent Classes
-                  </CardTitle>
+                  <CardTitle>Today's Classes</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {recentClasses.map((cls, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <div>
-                          <p className="font-medium">{cls.subject}</p>
-                          <p className="text-sm text-muted-foreground">{cls.time} • {cls.date}</p>
+                    {classes.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-8">No classes found. Please add classes to get started.</p>
+                    ) : (
+                      classes.map((classItem) => (
+                        <div key={classItem.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <div className="p-2 bg-primary/10 rounded-full">
+                              <Clock className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold">{classItem.subject}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {classItem.schedule_time} • {classItem.room_number} • Class {classItem.name}-{classItem.section}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={handleGenerateQR}
+                            >
+                              <QrCode className="h-4 w-4 mr-2" />
+                              Generate QR
+                            </Button>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <Badge variant={cls.present / cls.total > 0.8 ? "default" : "secondary"}>
-                            {cls.present}/{cls.total}
-                          </Badge>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {Math.round((cls.present / cls.total) * 100)}%
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Quick Actions */}
-              <Card className="bg-gradient-card">
+              <Card>
                 <CardHeader>
                   <CardTitle>Quick Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full justify-start"
-                    onClick={() => setShowQRCode(true)}
+                    onClick={handleGenerateQR}
                   >
                     <QrCode className="h-4 w-4 mr-2" />
-                    Generate QR Code for Current Class
+                    Generate QR Code
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Live Attendance
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => setActiveTab("attendance")}
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    View Attendance Records
                   </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add New Subject
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export Excel Report
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => setActiveTab("heatmap")}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    View Attendance Heatmap
                   </Button>
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
+          </>
+        )}
 
-          <TabsContent value="attendance">
-            <AttendanceTable />
-          </TabsContent>
+        {activeTab === "attendance" && <AttendanceTable />}
+        {activeTab === "heatmap" && <AttendanceHeatmap />}
 
-          <TabsContent value="heatmap">
-            <AttendanceHeatmap />
-          </TabsContent>
-
-          <TabsContent value="students">
-            <Card className="bg-gradient-card">
-              <CardHeader>
-                <CardTitle>Student Management</CardTitle>
-                <CardDescription>Manage students in your classes</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Student management features coming soon...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {showQRGenerator && (
+          <QRCodeGenerator
+            isOpen={showQRGenerator}
+            onClose={() => setShowQRGenerator(false)}
+            classInfo="Sample Class"
+          />
+        )}
       </div>
-
-      {/* QR Code Modal */}
-      {showQRCode && (
-        <QRCodeGenerator
-          isOpen={showQRCode}
-          onClose={() => setShowQRCode(false)}
-          classInfo={`${selectedClass}-${selectedSubject}`}
-        />
-      )}
     </div>
   );
 };

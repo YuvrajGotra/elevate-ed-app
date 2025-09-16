@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GraduationCap, Users, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import AuthLayout from "./AuthLayout";
 
 const LoginForm = () => {
@@ -28,29 +29,78 @@ const LoginForm = () => {
     });
   };
 
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Get user profile to determine role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (profile) {
+          navigate(profile.role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+        }
+      }
+    };
+    checkAuth();
+  }, [navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login process
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      toast({
-        title: "Login Successful",
-        description: `Welcome back, ${role}!`,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
       });
 
-      // Navigate to appropriate dashboard
-      if (role === 'teacher') {
-        navigate('/teacher/dashboard');
-      } else {
-        navigate('/student/dashboard');
+      if (error) {
+        toast({
+          title: "Login Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.user) {
+        // Get user profile to determine role and navigate accordingly
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', data.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          toast({
+            title: "Error",
+            description: "Could not fetch user profile.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        toast({
+          title: "Login Successful",
+          description: `Welcome back, ${profile.role}!`,
+        });
+
+        // Navigate to appropriate dashboard
+        if (profile.role === 'teacher') {
+          navigate('/teacher/dashboard');
+        } else {
+          navigate('/student/dashboard');
+        }
       }
     } catch (error) {
       toast({
         title: "Login Failed",
-        description: "Please check your credentials and try again.",
+        description: "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {
