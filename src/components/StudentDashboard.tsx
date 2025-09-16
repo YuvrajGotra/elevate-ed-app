@@ -11,13 +11,26 @@ const StudentDashboard = () => {
 
   const handleQRScan = () => {
     setIsScanning(true);
+    // Simulate scanning daily QR code
     setTimeout(() => {
       setIsScanning(false);
+      const today = new Date().toDateString();
       toast({
-        title: "Attendance Marked!",
-        description: "Your attendance has been successfully recorded.",
+        title: "Daily Attendance Marked!",
+        description: `Your attendance for ${today} has been successfully recorded.`,
       });
     }, 2000);
+  };
+
+  const handleManualEntry = () => {
+    const attendanceCode = prompt("Enter today's attendance code:");
+    if (attendanceCode) {
+      const today = new Date().toDateString();
+      toast({
+        title: "Attendance Marked!",
+        description: `Manual attendance for ${today} recorded with code: ${attendanceCode}`,
+      });
+    }
   };
 
   const studentData = {
@@ -77,9 +90,9 @@ const StudentDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <QrCode className="h-5 w-5 text-success" />
-                Quick Attendance
+                Daily Attendance
               </CardTitle>
-              <CardDescription>Scan QR code or use manual entry</CardDescription>
+              <CardDescription>Scan today's QR code or enter attendance code</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Button 
@@ -88,10 +101,14 @@ const StudentDashboard = () => {
                 disabled={isScanning}
               >
                 <Camera className="h-4 w-4 mr-2" />
-                {isScanning ? "Scanning..." : "Scan QR Code"}
+                {isScanning ? "Scanning..." : "Scan Today's QR Code"}
               </Button>
-              <Button variant="outline" className="w-full">
-                Manual Entry
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={handleManualEntry}
+              >
+                Enter Attendance Code
               </Button>
             </CardContent>
           </Card>

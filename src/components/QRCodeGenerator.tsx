@@ -21,11 +21,11 @@ const QRCodeGenerator = ({ isOpen, onClose, classInfo }: QRCodeGeneratorProps) =
 
   useEffect(() => {
     if (isOpen) {
-      // Generate unique QR data and link
-      const sessionId = Math.random().toString(36).substr(2, 9);
-      const timestamp = Date.now();
-      const qrContent = `ATTENDANCE:${classInfo}:${sessionId}:${timestamp}`;
-      const link = `https://attendance-app.punjab.gov.in/mark/${sessionId}`;
+      // Generate daily unique QR data and link
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const dailyId = `${today}-${Math.random().toString(36).substr(2, 6)}`;
+      const qrContent = `DAILY_ATTENDANCE:${classInfo}:${dailyId}:${today}`;
+      const link = `https://attendance-app.punjab.gov.in/daily/${dailyId}`;
       
       setQrData(qrContent);
       setAttendanceLink(link);
@@ -108,7 +108,7 @@ const QRCodeGenerator = ({ isOpen, onClose, classInfo }: QRCodeGeneratorProps) =
           {/* QR Code Section */}
           <Card className="bg-gradient-card">
             <CardHeader>
-              <CardTitle className="text-center">Scan to Mark Attendance</CardTitle>
+            <CardTitle className="text-center">Daily QR Code - {new Date().toDateString()}</CardTitle>
               <div className="flex justify-center items-center gap-4">
                 <Badge variant={timeLeft > 60 ? "default" : "destructive"}>
                   <Timer className="h-3 w-3 mr-1" />
@@ -116,7 +116,7 @@ const QRCodeGenerator = ({ isOpen, onClose, classInfo }: QRCodeGeneratorProps) =
                 </Badge>
                 <Badge variant="secondary">
                   <Users className="h-3 w-3 mr-1" />
-                  {attendanceCount} marked
+                  {attendanceCount} marked today
                 </Badge>
               </div>
             </CardHeader>
@@ -151,7 +151,7 @@ const QRCodeGenerator = ({ isOpen, onClose, classInfo }: QRCodeGeneratorProps) =
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  If students can't scan the QR code, they can use this link:
+                  Daily attendance link for {new Date().toDateString()}:
                 </p>
                 <div className="p-3 bg-muted rounded-lg">
                   <p className="text-sm font-mono break-all">{attendanceLink}</p>
@@ -197,11 +197,12 @@ const QRCodeGenerator = ({ isOpen, onClose, classInfo }: QRCodeGeneratorProps) =
               </CardHeader>
               <CardContent>
                 <ol className="text-sm space-y-2 text-muted-foreground">
-                  <li>1. Display this QR code on the classroom screen</li>
-                  <li>2. Students scan with their phones to mark attendance</li>
-                  <li>3. Alternative: Share the attendance link</li>
-                  <li>4. QR code expires in 5 minutes for security</li>
-                  <li>5. View real-time attendance updates</li>
+                  <li>1. Generate new QR code daily for attendance</li>
+                  <li>2. Display QR code on classroom screen</li>
+                  <li>3. Students scan daily to mark their attendance</li>
+                  <li>4. Alternative: Share the daily attendance link</li>
+                  <li>5. QR code valid for today only</li>
+                  <li>6. View real-time attendance updates</li>
                 </ol>
               </CardContent>
             </Card>
@@ -212,8 +213,11 @@ const QRCodeGenerator = ({ isOpen, onClose, classInfo }: QRCodeGeneratorProps) =
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button className="bg-primary shadow-primary">
-            Generate New QR Code
+          <Button 
+            className="bg-primary shadow-primary"
+            onClick={() => window.location.reload()}
+          >
+            Generate New Daily QR Code
           </Button>
         </div>
       </DialogContent>
